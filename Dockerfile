@@ -10,6 +10,9 @@ FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b34
 
 FROM $LITELLM_BUILD_IMAGE AS builder
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Set the working directory to /app
@@ -18,7 +21,7 @@ WORKDIR /app
 USER root
 
 # Install build dependencies
-RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev
+RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev libstdc++ npm
 
 RUN python -m pip install build
 
@@ -50,10 +53,14 @@ RUN pip install PyJWT==2.12.0 --no-cache-dir
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
 
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Ensure runtime stage runs as root
@@ -150,4 +157,5 @@ CMD ["--port", "4000"]
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null

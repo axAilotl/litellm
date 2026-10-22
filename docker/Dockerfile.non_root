@@ -11,6 +11,9 @@ FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b34
 
 FROM $LITELLM_BUILD_IMAGE AS builder
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 ARG PROXY_EXTRAS_SOURCE
 WORKDIR /app
@@ -30,6 +33,7 @@ RUN for i in 1 2 3; do \
     build-base \
     bash \
     nodejs \
+    libstdc++ \
     npm && break || sleep 5; \
     done \
   && pip install --no-cache-dir --upgrade pip build
@@ -82,8 +86,7 @@ RUN if [ "$PROXY_EXTRAS_SOURCE" = "local" ]; then \
 # Pre-cache Prisma binaries in the builder stage
 ENV PRISMA_BINARY_CACHE_DIR=/app/.cache/prisma-python/binaries \
     PRISMA_CLI_BINARY_TARGETS="debian-openssl-3.0.x" \
-    XDG_CACHE_HOME=/app/.cache \
-    PATH="/usr/lib/python3.13/site-packages/nodejs/bin:${PATH}"
+    XDG_CACHE_HOME=/app/.cache
 
 RUN pip install --no-cache-dir prisma==0.11.0 \
     && mkdir -p /app/.cache/npm
@@ -101,10 +104,14 @@ RUN prisma generate && \
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
 
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 ARG PROXY_EXTRAS_SOURCE
 WORKDIR /app
@@ -245,5 +252,6 @@ CMD ["--port", "4000"]
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
 USER nobody

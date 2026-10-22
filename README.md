@@ -388,7 +388,7 @@ Support for more providers. Missing a provider or LLM Platform, raise a [feature
 
 ### Backend
 
-Install the supported Node.js runtime selected by `.node-version` before generating Prisma clients. Python dependencies do not bundle a Node interpreter.
+Install the supported Node.js runtime selected by `.node-version` before generating Prisma clients. Python dependencies do not bundle a Node interpreter. The project Prisma settings provision a fixed, versioned Node environment when a global runtime is not explicitly selected; the command below uses the supported global installation.
 
 1. (In root) create virtual environment `python -m venv .venv`
 2. Activate virtual environment `source .venv/bin/activate`

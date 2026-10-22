@@ -10,6 +10,9 @@ FROM node:24.22.1-alpine@sha256:06d7adf3e0ef61a13f1d28682726366f97a15aa1888c934d
 
 FROM $LITELLM_BUILD_IMAGE AS builder
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 RUN apk add --no-cache libstdc++
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
@@ -41,10 +44,14 @@ RUN pip wheel --no-cache-dir --wheel-dir=/wheels/ -r requirements.txt
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
 
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 RUN apk add --no-cache libstdc++
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
@@ -72,4 +79,5 @@ CMD ["--port", "4000"]
 
 USER root
 RUN ln -sf /usr/local/bin/node /usr/bin/node \
-    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null

@@ -6,6 +6,9 @@ FROM ghcr.io/berriai/litellm:litellm_fwd_server_root_path-dev
 COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
 ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
+# Remove any old Node interpreter inherited from the published Python image.
+RUN pip uninstall -y nodejs-wheel-binaries nodejs-bin
+
 # Set the working directory to /app
 WORKDIR /app
 

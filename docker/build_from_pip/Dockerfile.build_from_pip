@@ -25,6 +25,9 @@ COPY docker/build_from_pip/requirements.txt .
 RUN --mount=type=cache,target=${HOME}/.cache/pip \
     ${HOME}/venv/bin/pip install -r requirements.txt
 
+# Python distributions must use the fixed image-owned Node interpreter.
+RUN ${HOME}/venv/bin/pip uninstall -y nodejs-wheel-binaries nodejs-bin
+
 # Copy Prisma schema file
 COPY schema.prisma .
 

@@ -5,7 +5,12 @@ ARG LITELLM_BUILD_IMAGE=python:3.11-slim
 ARG LITELLM_RUNTIME_IMAGE=python:3.11-slim
 
 # Builder stage
+# Fixed upstream Node is shared by builds and Prisma; no Python-bundled runtime.
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node_security
+
 FROM $LITELLM_BUILD_IMAGE AS builder
+COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Set the working directory to /app
 WORKDIR /app
@@ -50,7 +55,14 @@ RUN rm -rf dist/* && python -m build
 RUN pip install dist/*.whl
 
 # Runtime stage
+
+USER root
+RUN ln -sf /usr/local/bin/node /usr/bin/node \
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'
+
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
+COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Ensure runtime stage runs as root
 USER root
@@ -113,8 +125,7 @@ RUN pip install --no-cache-dir *.whl /wheels/* --no-index --find-links=/wheels/ 
     rm -f *.whl && \
     rm -rf /wheels
 
-# SECURITY FIX: nodejs-wheel-binaries (pip package used by Prisma) bundles a complete
-# npm with old vulnerable deps at /usr/lib/python3.*/site-packages/nodejs_wheel/.
+# Keep npm dependency hardening for remaining system-package copies.
 # Patch every copy of tar, glob, and brace-expansion inside that tree.
 RUN GLOBAL="$(npm root -g)" && \
     [ -n "$GLOBAL" ] || { echo "ERROR: npm root -g returned empty; aborting"; exit 1; } && \
@@ -148,3 +159,7 @@ ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
 # Append "--detailed_debug" to the end of CMD to view detailed debug logs 
 CMD ["--port", "4000"]
+
+USER root
+RUN ln -sf /usr/local/bin/node /usr/bin/node \
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")'

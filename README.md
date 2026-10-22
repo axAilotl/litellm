@@ -387,11 +387,14 @@ Support for more providers. Missing a provider or LLM Platform, raise a [feature
 2. Run dependant services `docker-compose up db prometheus`
 
 ### Backend
+
+Install the supported Node.js runtime selected by `.node-version` before generating Prisma clients. Python dependencies do not bundle a Node interpreter. The project Prisma settings provision a fixed, versioned Node environment when a global runtime is not explicitly selected; the command below uses the supported global installation.
+
 1. (In root) create virtual environment `python -m venv .venv`
 2. Activate virtual environment `source .venv/bin/activate`
 3. Install dependencies `pip install -e ".[all]"`
 4. `pip install prisma`
-5. `prisma generate`
+5. `PRISMA_USE_GLOBAL_NODE=true PRISMA_USE_NODEJS_BIN=false prisma generate`
 6. Start proxy backend `python litellm/proxy/proxy_cli.py`
 
 ### Frontend

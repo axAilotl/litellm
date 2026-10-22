@@ -5,7 +5,15 @@ ARG LITELLM_BUILD_IMAGE=cgr.dev/chainguard/wolfi-base
 ARG LITELLM_RUNTIME_IMAGE=cgr.dev/chainguard/wolfi-base
 
 # Builder stage
+# Fixed upstream Node is shared by builds and Prisma; no Python-bundled runtime.
+FROM node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS node_security
+
 FROM $LITELLM_BUILD_IMAGE AS builder
+COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Set the working directory to /app
 WORKDIR /app
@@ -13,7 +21,7 @@ WORKDIR /app
 USER root
 
 # Install build dependencies
-RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev
+RUN apk add --no-cache bash gcc py3-pip python3 python3-dev openssl openssl-dev libstdc++ npm
 
 RUN python -m pip install build
 
@@ -42,7 +50,18 @@ RUN pip uninstall PyJWT -y
 RUN pip install PyJWT==2.12.0 --no-cache-dir
 
 # Runtime stage
+
+USER root
+RUN ln -sf /usr/local/bin/node /usr/bin/node \
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
+
 FROM $LITELLM_RUNTIME_IMAGE AS runtime
+COPY --from=node_security /usr/local/bin/node /usr/local/bin/node
+COPY --from=node_security /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
+RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+    && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
+ENV PATH="/usr/local/bin:${PATH}" PRISMA_USE_NODEJS_BIN=false PRISMA_USE_GLOBAL_NODE=true
 
 # Ensure runtime stage runs as root
 USER root
@@ -92,16 +111,11 @@ COPY --from=builder /wheels/ /wheels/
 # Install the built wheel using pip; again using a wildcard if it's the only file
 RUN pip install *.whl /wheels/* --no-index --find-links=/wheels/ && rm -f *.whl && rm -rf /wheels
 
-# Replace the nodejs-wheel-binaries bundled node with the system node (fixes CVE-2025-55130)
-RUN NODEJS_WHEEL_NODE=$(find /usr/lib -path "*/nodejs_wheel/bin/node" 2>/dev/null) && \
-    if [ -n "$NODEJS_WHEEL_NODE" ]; then cp /usr/bin/node "$NODEJS_WHEEL_NODE"; fi
-
 # Remove test files and keys from dependencies
 RUN find /usr/lib -type f -path "*/tornado/test/*" -delete && \
     find /usr/lib -type d -path "*/tornado/test" -delete
 
-# SECURITY FIX: nodejs-wheel-binaries (pip package used by Prisma) bundles a complete
-# npm with old vulnerable deps at /usr/lib/python3.*/site-packages/nodejs_wheel/.
+# Keep npm dependency hardening for remaining system-package copies.
 # Patch every copy of tar, glob, and brace-expansion inside that tree.
 RUN GLOBAL="$(npm root -g)" && \
     [ -n "$GLOBAL" ] || { echo "ERROR: npm root -g returned empty; aborting"; exit 1; } && \
@@ -140,3 +154,8 @@ ENTRYPOINT ["docker/prod_entrypoint.sh"]
 
 # Append "--detailed_debug" to the end of CMD to view detailed debug logs
 CMD ["--port", "4000"]
+
+USER root
+RUN ln -sf /usr/local/bin/node /usr/bin/node \
+    && node -e 'if (process.version !== "v24.22.1") throw new Error("Unexpected Node runtime")' \
+    && npm --version >/dev/null
